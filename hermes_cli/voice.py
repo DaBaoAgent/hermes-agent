@@ -65,7 +65,14 @@ _VOICE_NAMED_KEYS = {
     "bs": "backspace",
     "delete": "delete",
     "del": "delete",
+    "home": "home",
 }
+
+# Named keys safe to bind WITHOUT a modifier (bare single keypress).
+# Navigation keys only — home is the wake binding. Printable / editing
+# keys (space, enter, tab, escape, backspace, delete) stay modifier-only:
+# binding them bare would swallow typing or break editing / cancel.
+_VOICE_BARE_SAFE_KEYS = frozenset({"home"})
 
 # ``useInputHandlers()`` intercepts these before the voice check runs,
 # so a binding like ``ctrl+c`` (interrupt), ``ctrl+d`` (quit), or
@@ -139,10 +146,15 @@ def normalize_voice_record_key_for_prompt_toolkit(raw: Any) -> str:
     if len(parts) > 2:
         return _DEFAULT_PT_KEY
 
-    # Bare char / bare named key (no explicit modifier) — the CLI's
-    # prompt_toolkit binds the raw key without a modifier, which the TUI
-    # parser refuses; reject here too so both runtimes agree.
+    # Bare named key (no modifier), e.g. ``home`` — bind the raw key in
+    # prompt_toolkit so a single keypress (no ctrl/alt chord) can trigger
+    # voice. Only ``_VOICE_BARE_SAFE_KEYS`` qualify (navigation keys like
+    # home); printable/editing keys (space, enter, escape, …) stay
+    # modifier-only because a bare binding would swallow typing or break
+    # editing/cancel. Bare single characters are also rejected.
     if len(parts) == 1:
+        if parts[0] in _VOICE_BARE_SAFE_KEYS:
+            return _VOICE_NAMED_KEYS[parts[0]]
         return _DEFAULT_PT_KEY
 
     modifier_token, key_token = parts
@@ -213,6 +225,9 @@ def format_voice_record_key_for_status(raw: Any) -> str:
         # render in title case so status output is still readable.
         mod, key = normalized.split("+", 1)
         prefix = mod[0].upper() + mod[1:] + "+"
+    elif normalized != _DEFAULT_PT_KEY:
+        # Bare named key (no modifier), e.g. ``home`` — render title case.
+        return normalized[0].upper() + normalized[1:]
     else:
         return "Ctrl+B"
 

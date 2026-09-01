@@ -342,6 +342,16 @@ export const requestVoiceToggle = (target: ComposerTarget | 'active' = 'active')
 export const onComposerVoiceToggleRequest = (handler: (target: ComposerTarget) => void) =>
   subscribe<{ target: ComposerTarget }>(VOICE_TOGGLE_EVENT, ({ target }) => handler(target))
 
+const DICTATE_TOGGLE_EVENT = 'hermes:composer-dictate-toggle'
+
+/** Toggle ONE composer's push-to-talk dictation — the `composer.dictate`
+ *  hotkey (Home). Same hover-first targeting as the voice toggle. */
+export const requestDictateToggle = (target: ComposerTarget | 'active' = 'active') =>
+  dispatch<{ target: ComposerTarget }>(DICTATE_TOGGLE_EVENT, { target: resolve(target) })
+
+export const onComposerDictateToggleRequest = (handler: (target: ComposerTarget) => void) =>
+  subscribe<{ target: ComposerTarget }>(DICTATE_TOGGLE_EVENT, ({ target }) => handler(target))
+
 /** The chat surface inside the zone the pointer is over, if any. Mirrors the
  *  tab verbs' hover-first targeting (`tabTargetGroupId`, #74447): the model
  *  hotkey lands in the pane you're pointing at without clicking into it first.

@@ -14,7 +14,7 @@ import { $autoSpeakReplies, $voiceStopPhrase, setAutoSpeakReplies } from '@/stor
 import { resumeWakeAfterVoice } from '@/store/wake-word'
 
 import type { ComposerTarget } from '../focus'
-import { onComposerVoiceToggleRequest } from '../focus'
+import { onComposerDictateToggleRequest, onComposerVoiceToggleRequest } from '../focus'
 import { useComposerScope } from '../scope'
 import type { ChatBarProps } from '../types'
 
@@ -196,6 +196,16 @@ export function useComposerVoice({
   useEffect(
     () => onComposerVoiceToggleRequest(toggled => toggled === target && toggleVoiceConversation()),
     [target, toggleVoiceConversation]
+  )
+
+  // The `composer.dictate` hotkey (Home) toggles push-to-talk dictation on the
+  // target composer — the same action as clicking the mic icon. Dictation is
+  // independent of the voice conversation loop (it inserts a transcript into
+  // the draft instead of running a full dialogue), so it doesn't touch
+  // `voiceConversationActive`.
+  useEffect(
+    () => onComposerDictateToggleRequest(toggled => toggled === target && dictate()),
+    [dictate, target]
   )
 
   useEffect(() => {

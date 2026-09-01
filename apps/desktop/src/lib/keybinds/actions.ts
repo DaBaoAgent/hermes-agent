@@ -66,6 +66,11 @@ export const KEYBIND_ACTIONS: readonly KeybindActionMeta[] = [
   // chord, so ship it unbound there (rebindable in the panel) rather than
   // stealing the long-standing sidebar binding.
   { id: 'composer.voice', category: 'composer', defaults: IS_MAC ? ['ctrl+b'] : [] },
+  // Push-to-talk dictation (transcript → draft). Mirrors `voice.record_key`
+  // from the CLI contract. Left unbound by default: `home` is a core editing
+  // key (cursor to line start) and binding it to dictation fires recordings
+  // on ordinary typing — opt in via the keybindings panel if wanted.
+  { id: 'composer.dictate', category: 'composer', defaults: [] },
 
   // ── Profiles ─────────────────────────────────────────────────────────────
   { id: 'profile.default', category: 'profiles', defaults: ['mod+d'] },

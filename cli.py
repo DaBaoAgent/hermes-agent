@@ -18981,7 +18981,12 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin, CLIBillingMixin):
         # voice.record_key mid-session (Copilot round-13 on #19835).
         self.set_voice_record_key_cache(_raw_key)
 
-        @kb.add(*pt_key_to_sequence(_voice_key))
+        # Bare-key bindings (e.g. ``home``) must not swallow the key's
+        # default editing behavior while voice mode is off — filter the
+        # binding on voice mode so Home keeps moving the cursor to the
+        # line start until /voice on. Modifier chords (Ctrl+B) are
+        # unaffected: they have no default behavior to preserve.
+        @kb.add(*pt_key_to_sequence(_voice_key), filter=Condition(lambda: bool(cli_ref._voice_mode)))
         def handle_voice_record(event):
             """Toggle voice recording when voice mode is active.
 

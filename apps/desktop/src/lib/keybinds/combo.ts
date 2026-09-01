@@ -33,6 +33,8 @@ const CODE_TO_KEY: Record<string, string> = {
   Escape: 'escape',
   Backspace: 'backspace',
   Tab: 'tab',
+  Home: 'home',
+  End: 'end',
   PageUp: 'pageup',
   PageDown: 'pagedown',
   ArrowUp: 'up',
@@ -174,6 +176,8 @@ const TOKEN_LABELS: Record<string, string> = {
   pageup: 'PgUp',
   pagedown: 'PgDn',
   space: 'Space',
+  home: 'Home',
+  end: 'End',
   up: '↑',
   down: '↓',
   left: '←',
@@ -273,7 +277,11 @@ export function actionAllowedInInput(actionId: string, combo: string): boolean {
   // A bare modifier (no key) is not a real chord — `comboFromEvent` never
   // yields one, but reject it here so a malformed stored binding can't pass
   // the shape-only mod/ctrl check below.
-  if (!base || base === 'mod' || base === 'ctrl' || TEXT_NAVIGATION_KEYS.has(base)) {
+  // `home` is the one navigation-key exception — the dictation wake key
+  // (voice.record_key mirror): its typing behavior (jump to line start) is
+  // harmless to sacrifice while the binding is active, so it can fire from
+  // the composer without a modifier.
+  if (!base || base === 'mod' || base === 'ctrl' || (TEXT_NAVIGATION_KEYS.has(base) && base !== 'home')) {
     return false
   }
 

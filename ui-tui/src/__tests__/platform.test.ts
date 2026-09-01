@@ -91,6 +91,19 @@ describe('isVoiceToggleKey', () => {
     expect(isVoiceToggleKey({ ctrl: true, meta: false, super: false }, 'a')).toBe(false)
     expect(isVoiceToggleKey({ ctrl: true, meta: false, super: false }, 'c')).toBe(false)
   })
+
+  it('matches bare home only when every modifier bit is clear', async () => {
+    const { isVoiceToggleKey } = await importPlatform('linux')
+    const parsed = { ch: 'home', mod: 'none', named: 'home', raw: 'home' } as const
+
+    expect(isVoiceToggleKey({ ctrl: false, meta: false, super: false, home: true }, '', parsed)).toBe(true)
+    // Any modifier (or shift) must not fire the bare binding.
+    expect(isVoiceToggleKey({ ctrl: true, meta: false, super: false, home: true }, '', parsed)).toBe(false)
+    expect(isVoiceToggleKey({ ctrl: false, meta: false, super: true, home: true }, '', parsed)).toBe(false)
+    expect(isVoiceToggleKey({ ctrl: false, meta: false, super: false, home: true, shift: true }, '', parsed)).toBe(false)
+    // No home flag on the event (any other key) never matches.
+    expect(isVoiceToggleKey({ ctrl: false, meta: false, super: false }, '', parsed)).toBe(false)
+  })
 })
 
 describe('parseVoiceRecordKey (#18994)', () => {
@@ -196,6 +209,21 @@ describe('parseVoiceRecordKey (#18994)', () => {
     expect(parseVoiceRecordKey('b')).toEqual(DEFAULT_VOICE_RECORD_KEY)
     expect(parseVoiceRecordKey('space')).toEqual(DEFAULT_VOICE_RECORD_KEY)
     expect(parseVoiceRecordKey('escape')).toEqual(DEFAULT_VOICE_RECORD_KEY)
+  })
+
+  it('parses bare home as a modifier-free named binding', async () => {
+    const { parseVoiceRecordKey } = await importPlatform('linux')
+
+    // ``home`` is a bare-safe navigation key (the wake binding): one tap
+    // toggles voice with no ctrl/alt chord. Printable/editing named keys
+    // stay modifier-only — see the bare-char rejection above.
+    expect(parseVoiceRecordKey('home')).toEqual({
+      ch: 'home',
+      mod: 'none',
+      named: 'home',
+      raw: 'home'
+    })
+    expect(parseVoiceRecordKey('HOME').mod).toBe('none')
   })
 
   it('rejects ctrl+c / ctrl+d / ctrl+l — reserved by the TUI input handler', async () => {

@@ -385,6 +385,17 @@ export function useGatewayBoot({
         // Resync state that may have moved on the backend while we were asleep.
         await callbacksRef.current.refreshHermesConfig().catch(() => undefined)
         await callbacksRef.current.refreshSessions().catch(() => undefined)
+
+        // First-connect stall recovery: the initial boot() may have failed
+        // while the cold backend was still under GIL pressure (#60800/#74874 —
+        // the WS ready frame doesn't land inside the 15s connect window, so the
+        // renderer reports dead even though the backend process is alive). The
+        // reconnect loop that just succeeded IS the fix for that case; finish
+        // the boot handshake here so the user never sees the failure card.
+        if (!bootCompleted) {
+          bootCompleted = true
+          completeDesktopBoot()
+        }
       } catch (err) {
         // OAuth session expired mid-reconnect: surface the actionable "sign in
         // again" recovery overlay once instead of silently looping the backoff
@@ -1020,7 +1031,25 @@ export function useGatewayBoot({
           'Timed out minting the gateway WebSocket URL'
         )
 
-        await gateway.connect(wsUrl)
+        try {
+          await gateway.connect(wsUrl)
+        } catch (connectErr) {
+          // Cold-start WS stall recovery (#60800/#74874): a freshly spawned
+          // backend can sit under GIL pressure for ~14s before its WS ready
+          // frame lands, blowing the default 15s connect window at the margin.
+          // The backend process is alive and will be healthy seconds later —
+          // do NOT brick boot behind the failure card for that. Hand off to
+          // the reconnect loop (fresh URL mint + backoff); it escalates to the
+          // failure overlay only after sustained failure
+          // (RECONNECT_ESCALATE_AFTER_MS). Auth rejections still throw.
+          if (!cancelled && !isGatewayReauthRequired(connectErr)) {
+            setSessionsLoading(false)
+            scheduleReconnect()
+            return
+          }
+
+          throw connectErr
+        }
 
         if (cancelled) {
           return
