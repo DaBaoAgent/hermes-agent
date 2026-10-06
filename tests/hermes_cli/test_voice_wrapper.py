@@ -50,6 +50,35 @@ class TestNormalizeVoiceRecordKeyForPromptToolkit:
         assert normalize_voice_record_key_for_prompt_toolkit("win+o") == "c-b"
         assert normalize_voice_record_key_for_prompt_toolkit("windows+o") == "c-b"
 
+    def test_bare_named_key_binds_raw_key(self):
+        """A bare named key (``home``) binds the raw prompt_toolkit key so
+        a single keypress — no ctrl/alt chord — can trigger voice. This is
+        the Home-key wake binding: ``voice.record_key: home``."""
+        from hermes_cli.voice import normalize_voice_record_key_for_prompt_toolkit
+
+        assert normalize_voice_record_key_for_prompt_toolkit("home") == "home"
+        assert normalize_voice_record_key_for_prompt_toolkit("Home") == "home"
+        assert normalize_voice_record_key_for_prompt_toolkit(" HOME ") == "home"
+
+    def test_bare_single_char_still_falls_back(self):
+        """Bare single characters stay rejected — binding ``o`` would make
+        the CLI swallow the letter while typing. Only named keys qualify
+        for a bare binding."""
+        from hermes_cli.voice import normalize_voice_record_key_for_prompt_toolkit
+
+        assert normalize_voice_record_key_for_prompt_toolkit("o") == "c-b"
+        assert normalize_voice_record_key_for_prompt_toolkit("b") == "c-b"
+
+    def test_bare_editing_keys_still_fall_back(self):
+        """Printable/editing named keys (space, enter, escape, backspace,
+        delete, tab) stay modifier-only — a bare binding would swallow
+        typing or break editing/cancel. Only navigation keys (home) are
+        bare-safe."""
+        from hermes_cli.voice import normalize_voice_record_key_for_prompt_toolkit
+
+        for key in ("space", "enter", "escape", "backspace", "delete", "tab"):
+            assert normalize_voice_record_key_for_prompt_toolkit(key) == "c-b", key
+
     # Round-10 Copilot review regressions on #19835.
 
 
@@ -117,6 +146,11 @@ class TestFormatVoiceRecordKeyForStatus:
         assert format_voice_record_key_for_status("ctrl+b") == "Ctrl+B"
         assert format_voice_record_key_for_status("ctrl+o") == "Ctrl+O"
         assert format_voice_record_key_for_status("alt+r") == "Alt+R"
+
+    def test_bare_named_key_renders_title_case(self):
+        from hermes_cli.voice import format_voice_record_key_for_status
+
+        assert format_voice_record_key_for_status("home") == "Home"
 
 
 
