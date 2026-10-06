@@ -163,8 +163,17 @@ class _ManagedAttempt:
 
     def result(self, managed: Any, defer_logical_completion: bool) -> Any:
         self._complete(defer_logical_completion)
-        if "value" in self.raw_response and _json_equal(managed, self.raw_response["json"]):
+        _dbg_eq = _json_equal(managed, self.raw_response["json"]) if "value" in self.raw_response else None
+        if _dbg_eq:
             return self.raw_response["value"]
+        # 2026-09-25：relay 管线若把正文弄丢（vision 链路曾因此被判空），回退原始响应
+        if _response_has_content(self.raw_response.get("value")):
+            if not _response_has_content(managed):
+                logger.info("relay-debug: relay response dropped message content (eq=%s); "
+                            "falling back to raw provider response", _dbg_eq)
+                return self.raw_response["value"]
+        elif not _response_has_content(managed):
+            logger.info("relay-debug: relay response carries no content (eq=%s)", _dbg_eq)
         return _namespace(managed)
 
     def _complete(self, defer_logical_completion: bool) -> None:
@@ -921,6 +930,31 @@ def _json_equal(left: Any, right: Any) -> bool:
     try:
         return _canonical_json(left) == _canonical_json(right)
     except (TypeError, ValueError):
+        return False
+
+
+def _response_has_content(value: Any) -> bool:
+    """Chat-completion-shaped 值里是否带非空正文（dict 或 SDK 对象均支持）。
+
+    2026-09-25：本地自建 vision 端点（model_vision_server，:1235）经 relay 管线后
+    正文丢失，下游 vision 工具据此判空并报"识图失败"。此函数用于检测该情形，
+    以便回退到原始 provider 响应。
+    """
+    if value is None:
+        return False
+    try:
+        choices = (value.get("choices") if isinstance(value, dict)
+                   else getattr(value, "choices", None)) or []
+        if not choices:
+            return False
+        first = choices[0]
+        msg = (first.get("message") if isinstance(first, dict)
+               else getattr(first, "message", None))
+        if msg is None:
+            return False
+        text = msg.get("content") if isinstance(msg, dict) else getattr(msg, "content", None)
+        return bool(str(text or "").strip())
+    except Exception:
         return False
 
 

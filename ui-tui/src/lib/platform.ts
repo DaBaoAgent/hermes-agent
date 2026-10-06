@@ -64,12 +64,12 @@ export const isCopyShortcut = (
  * macOS action modifier (Cmd+B) — custom bindings like ``ctrl+o``
  * require the literal Ctrl bit so Cmd+O can't steal the shortcut.
  */
-export type VoiceRecordKeyMod = 'alt' | 'ctrl' | 'super'
+export type VoiceRecordKeyMod = 'alt' | 'ctrl' | 'super' | 'none'
 
 /** Named (multi-character) keys we support, matching the CLI's
  * prompt_toolkit binding shape (``c-space``, ``c-enter``, etc.) so a
  * config value like ``ctrl+space`` binds in both runtimes. */
-export type VoiceRecordKeyNamed = 'backspace' | 'delete' | 'enter' | 'escape' | 'space' | 'tab'
+export type VoiceRecordKeyNamed = 'backspace' | 'delete' | 'enter' | 'escape' | 'home' | 'space' | 'tab'
 
 export interface ParsedVoiceRecordKey {
   /** Single character (``'b'``, ``'o'``) when ``named`` is undefined,
@@ -134,12 +134,22 @@ const _NAMED_KEY_ALIASES: Record<string, VoiceRecordKeyNamed> = {
   enter: 'enter',
   esc: 'escape',
   escape: 'escape',
+  home: 'home',
   ret: 'enter',
   return: 'enter',
   space: 'space',
   spc: 'space',
   tab: 'tab'
 }
+
+/** Named keys safe to bind WITHOUT a modifier (bare single keypress).
+ * Navigation keys only — ``home`` is the wake binding. Printable /
+ * editing keys (space, enter, tab, escape, backspace, delete) stay
+ * modifier-only: binding them bare would swallow typing or break
+ * editing/cancel. Mirrors ``_VOICE_BARE_SAFE_KEYS`` in
+ * ``hermes_cli/voice.py`` so one config value binds identically in
+ * both runtimes. */
+const _BARE_SAFE_NAMED_KEYS: ReadonlySet<VoiceRecordKeyNamed> = new Set(['home'])
 
 /** ``useInputHandlers()`` intercepts these unconditionally before the
  * voice check runs, so a binding like ``ctrl+c`` (interrupt),
@@ -182,6 +192,7 @@ interface RuntimeKeyEvent {
   ctrl: boolean
   delete?: boolean
   escape?: boolean
+  home?: boolean
   meta: boolean
   return?: boolean
   shift?: boolean
@@ -205,6 +216,9 @@ const _matchesNamedKey = (named: VoiceRecordKeyNamed, key: RuntimeKeyEvent, ch: 
 
     case 'escape':
       return key.escape === true
+
+    case 'home':
+      return key.home === true
 
     case 'space':
       return ch === ' '
@@ -262,12 +276,20 @@ export const parseVoiceRecordKey = (raw: unknown): ParsedVoiceRecordKey => {
     return DEFAULT_VOICE_RECORD_KEY
   }
 
-  // Require an explicit modifier. A bare ``o`` / ``space`` / ``escape``
-  // has no sensible mapping: the CLI's prompt_toolkit binds the raw
-  // key (no rewrite) so bare-char configs would silently diverge
-  // between the two runtimes (Copilot round-4 review on #19835).
-  // Fall back to the documented default.
+  // A bare named key (no modifier), e.g. ``home``, is a deliberate
+  // single-keypress binding: bind it directly so one tap toggles voice.
+  // Only ``_BARE_SAFE_NAMED_KEYS`` qualify (navigation keys like home);
+  // printable/editing keys (space, enter, escape, …) stay modifier-only
+  // because a bare binding would swallow typing or break editing/cancel.
+  // Bare single characters are also rejected. This mirrors the CLI
+  // normalizer in ``hermes_cli/voice.py``.
   if (modCandidates.length === 0) {
+    const bareNamed = _NAMED_KEY_ALIASES[last]
+
+    if (bareNamed && _BARE_SAFE_NAMED_KEYS.has(bareNamed)) {
+      return { ch: bareNamed, mod: 'none', named: bareNamed, raw: lower }
+    }
+
     return DEFAULT_VOICE_RECORD_KEY
   }
 
@@ -330,6 +352,11 @@ export const parseVoiceRecordKey = (raw: unknown): ParsedVoiceRecordKey => {
  * Linux/Windows users the wrong modifier to press (Copilot review, round
  * 2 on #19835). */
 export const formatVoiceRecordKey = (parsed: ParsedVoiceRecordKey): string => {
+  // Bare named keys (``home``) have no modifier — render just the key.
+  if (parsed.mod === 'none') {
+    return parsed.named ? parsed.named[0].toUpperCase() + parsed.named.slice(1) : parsed.ch.toUpperCase()
+  }
+
   const modLabel =
     parsed.mod === 'super' ? (isMac ? 'Cmd' : 'Super') : parsed.mod[0].toUpperCase() + parsed.mod.slice(1)
 
@@ -376,6 +403,11 @@ export const isVoiceToggleKey = (
   }
 
   switch (configured.mod) {
+    case 'none':
+      // Bare-key binding: every modifier bit must be clear so
+      // Ctrl+Home / Alt+Home / Cmd+Home never fire the bare binding.
+      return !key.shift && !key.ctrl && !key.alt && !key.meta && key.super !== true
+
     case 'alt':
       // Most terminals surface Alt as either ``alt`` or ``meta``; accept
       // both so the binding works across xterm-style and kitty-style

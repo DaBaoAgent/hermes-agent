@@ -2051,7 +2051,13 @@ class CLITuiMixin:
         kb.add('escape', 'escape', filter=~_modal_prompt_active)(self._tui_handle_double_escape)
         kb.add('c-z')(self._tui_handle_ctrl_z)
 
-        kb.add(*self._tui_voice_record_key_sequence())(self._tui_handle_voice_record)
+        # Bare-key bindings (e.g. ``home``) must not swallow the key's default editing
+        # behavior while voice mode is off — filter the binding on voice mode so Home keeps
+        # moving the cursor to the line start until /voice on. Modifier chords (Ctrl+B) are
+        # unaffected: they have no default behavior to preserve.
+        kb.add(
+            *self._tui_voice_record_key_sequence(),
+            filter=Condition(lambda: bool(self._voice_mode)))(self._tui_handle_voice_record)
         kb.add(Keys.BracketedPaste, eager=True)(self._tui_handle_paste)
         kb.add('c-v')(self._tui_handle_ctrl_v)
         kb.add('escape', 'v')(self._tui_handle_alt_v)

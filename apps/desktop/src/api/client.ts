@@ -32,6 +32,13 @@ export class HermesGateway extends JsonRpcGatewayClient {
     super({
       closedErrorMessage: 'Hermes gateway connection closed',
       connectErrorMessage: 'Could not connect to Hermes gateway',
+      // Cold-start WS stall recovery (#60800/#74874): a freshly spawned
+      // backend can spend ~14s under GIL pressure before the WS ready frame
+      // lands, while the client default connect window is only 15s — a cold
+      // boot then fails at the margin and bricks the app behind the failure
+      // card even though the backend process is perfectly alive. 45s absorbs
+      // the stall; the boot reconnect loop is the second line of defense.
+      connectTimeoutMs: 45_000,
       createRequestId: nextId => nextId,
       notConnectedErrorMessage: GATEWAY_NOT_CONNECTED_MESSAGE,
       // The channel already answered -32603; surface the crash in devtools like the dial-failure sink.

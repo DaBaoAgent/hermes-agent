@@ -25,7 +25,15 @@ _VOICE_MOD_ALIASES = {"ctrl": "c-", "control": "c-", "alt": "a-", "option": "a-"
 _VOICE_NAMED_KEYS = {
     "space": "space", "spc": "space", "enter": "enter", "return": "enter", "ret": "enter", "tab": "tab",
     "escape": "escape", "esc": "escape", "backspace": "backspace", "bs": "backspace", "delete": "delete", "del": "delete",
+    "home": "home",
 }
+
+# Named keys safe to bind WITHOUT a modifier (bare single keypress). Navigation keys only —
+# ``home`` is the wake binding. Printable / editing keys (space, enter, tab, escape,
+# backspace, delete) stay modifier-only: binding them bare would swallow typing or break
+# editing/cancel. Mirrors ``_BARE_SAFE_NAMED_KEYS`` in ``ui-tui/src/lib/platform.ts`` so one
+# config value (``voice.record_key: home``) binds identically in both runtimes.
+_VOICE_BARE_SAFE_KEYS = frozenset({"home"})
 
 # ``useInputHandlers()`` intercepts ctrl+c/d/l (interrupt/quit/clear) before the voice check, so
 # such a binding would be advertised but never fire (same blocklist as the TUI parser). On macOS
@@ -70,6 +78,15 @@ def normalize_voice_record_key_for_prompt_toolkit(raw: Any) -> str:
     if not isinstance(raw, str):
         return _DEFAULT_PT_KEY
     parts = [p.strip() for p in raw.strip().lower().split("+") if p.strip()]
+    if len(parts) == 1:
+        # A bare named key (no modifier), e.g. ``home``, is a deliberate single-keypress
+        # binding: bind the raw prompt_toolkit key so one tap toggles voice. Only
+        # ``_VOICE_BARE_SAFE_KEYS`` qualify (navigation keys like home); printable/editing
+        # keys (space, enter, escape, backspace, delete, tab) stay modifier-only because a
+        # bare binding would swallow typing or break editing/cancel. Bare single characters
+        # are also rejected. Mirrors the TUI parser in ``ui-tui/src/lib/platform.ts``.
+        named = _VOICE_NAMED_KEYS.get(parts[0])
+        return named if named and named in _VOICE_BARE_SAFE_KEYS else _DEFAULT_PT_KEY
     if len(parts) != 2:
         return _DEFAULT_PT_KEY
     modifier_token, key_token = parts
@@ -104,6 +121,10 @@ def format_voice_record_key_for_status(raw: Any) -> str:
     #19835.
     """
     normalized = normalize_voice_record_key_for_prompt_toolkit(raw)
+    if "-" not in normalized:
+        # Bare named key (``home``) — no modifier to prefix; render title-case so
+        # ``/voice status`` matches the TUI's ``formatVoiceRecordKey``.
+        return normalized[0].upper() + normalized[1:]
     prefix = "Alt+" if normalized.startswith("a-") else "Ctrl+"
     key = normalized[2:]
     return prefix + key[0].upper() + key[1:]
